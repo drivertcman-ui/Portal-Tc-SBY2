@@ -1069,6 +1069,27 @@ export async function importSourceFromSupabase(sourceKey: keyof SupabaseConfigSt
       db.supabaseConfig.sources.undangan.lastSyncedAt = new Date().toISOString();
       db.supabaseConfig.sources.undangan.error = undefined;
       db.lastSyncedAt = new Date().toISOString();
+
+      // Keep db.trainings automatically synchronized with newUndangan if trainings has no distinct custom URL
+      if (!db.supabaseConfig.sources.trainings?.url || db.supabaseConfig.sources.trainings.url === db.supabaseConfig.sources.undangan?.url) {
+        db.trainings = newUndangan.map(u => ({
+          tanggal_awal: u.tanggal,
+          nik: u.nik,
+          nama: u.nama,
+          kode_toko: u.kode_toko,
+          nama_toko: u.nama_toko,
+          jenis_training: u.jenis_training,
+          cabang: u.cabang,
+          as: u.as,
+          am: u.am,
+          batch: u.batch,
+          status: u.status,
+        }));
+        db.supabaseConfig.sources.trainings.count = db.trainings.length;
+        db.supabaseConfig.sources.trainings.status = 'success';
+        db.supabaseConfig.sources.trainings.lastSyncedAt = new Date().toISOString();
+      }
+
       persistDb();
       return { success: true, count, source: 'undangan' };
     }
@@ -1169,20 +1190,53 @@ export async function syncAllFromSupabase(): Promise<{
   };
 }
 
-export async function ensureDbReady() {
-  if (Object.keys(db.users).length > 0) return;
-  // If no users loaded and supabase is configured, attempt import
-  const creds = getEffectiveSupabaseCredentials('users');
-  if (creds.url && creds.anonKey) {
-    await syncAllFromSupabase().catch(() => {});
+let isAutoSyncing = false;
+let lastAutoSyncTimestamp = 0;
+
+export async function runAutoSyncWithSupabase(force = false): Promise<void> {
+  const now = Date.now();
+  // Throttle to at most once every 5 seconds unless forced
+  if (!force && (now - lastAutoSyncTimestamp < 5000 || isAutoSyncing)) {
+    return;
+  }
+  if (isAutoSyncing) return;
+
+  isAutoSyncing = true;
+  lastAutoSyncTimestamp = now;
+  try {
+    await syncAllFromSupabase();
+  } catch (err: any) {
+    console.warn('⚠️ Auto sync with Supabase failed:', err?.message || err);
+  } finally {
+    isAutoSyncing = false;
   }
 }
 
-// Middleware: Ensure database is ready before processing API routes
+export async function ensureDbReady() {
+  const lastSyncTime = db.lastSyncedAt ? new Date(db.lastSyncedAt).getTime() : 0;
+  // If never synced or last sync older than 10 seconds, trigger auto-sync
+  if (Date.now() - lastSyncTime > 10000 || Object.keys(db.users).length === 0) {
+    runAutoSyncWithSupabase().catch(() => {});
+  }
+}
+
+// Automatic background sync loop every 10 seconds (silent, zero downtime/flicker)
+const AUTO_SYNC_INTERVAL_MS = 10000;
+setInterval(() => {
+  runAutoSyncWithSupabase().catch(() => {});
+}, AUTO_SYNC_INTERVAL_MS);
+
+// Initial auto-sync shortly after startup
+setTimeout(() => {
+  runAutoSyncWithSupabase().catch(() => {});
+}, 1000);
+
+// Middleware: Ensure database stays continuously synchronized
 app.use(async (_req: Request, _res: Response, next) => {
   try {
-    if (Object.keys(db.users).length === 0) {
-      await ensureDbReady();
+    const lastSync = db.lastSyncedAt ? new Date(db.lastSyncedAt).getTime() : 0;
+    if (Date.now() - lastSync > 15000 || Object.keys(db.users).length === 0) {
+      runAutoSyncWithSupabase().catch(() => {});
     }
   } catch (err) {
     console.error('ensureDbReady middleware error:', err);
@@ -2813,7 +2867,7 @@ app.get('/api/admin/export-csv', authMiddleware, (req: Request, res: Response) =
 });
 
 // 18. Get Undangan Schedule (Agenda Jadwal Training)
-app.get('/api/undangan', authMiddleware, (req: Request, res: Response) => {
+app.get('/api/undangan', authMiddleware, async (req: Request, res: Response) => {
   const session = (req as any).userSession;
   const {
     search = '',
@@ -2830,7 +2884,19 @@ app.get('/api/undangan', authMiddleware, (req: Request, res: Response) => {
     myOnly = 'false',
     page = '1',
     limit = '25',
+    refresh = 'false',
   } = req.query;
+
+  // If explicit refresh requested, sync immediately from Supabase
+  if (refresh === 'true' || refresh === '1') {
+    await importSourceFromSupabase('undangan').catch(() => {});
+  } else {
+    // Check if background auto-sync should run
+    const lastSync = db.lastSyncedAt ? new Date(db.lastSyncedAt).getTime() : 0;
+    if (Date.now() - lastSync > 10000) {
+      runAutoSyncWithSupabase().catch(() => {});
+    }
+  }
 
   const searchQuery = String(search).toLowerCase().trim();
   const nikFilter = String(nik).toLowerCase().trim();
@@ -2973,6 +3039,7 @@ app.get('/api/undangan', authMiddleware, (req: Request, res: Response) => {
       totalCabang: cabangSet.size,
       myTotal,
     },
+    lastSyncedAt: db.lastSyncedAt,
   });
 });
 

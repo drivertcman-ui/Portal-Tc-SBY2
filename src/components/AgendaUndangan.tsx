@@ -57,14 +57,16 @@ export const AgendaUndangan: React.FC<AgendaUndanganProps> = ({
 
   // Data state
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [response, setResponse] = useState<UndanganResponse | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Load data from server
-  const loadData = async () => {
+  const loadData = async (silent = false, forceRefresh = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
+      if (forceRefresh) setIsRefreshing(true);
       setError('');
       const data = await api.getUndangan({
         search,
@@ -80,19 +82,45 @@ export const AgendaUndangan: React.FC<AgendaUndanganProps> = ({
         myOnly,
         page,
         limit,
+        refresh: forceRefresh,
       });
       setResponse(data);
     } catch (err: any) {
-      console.error('Error loading agenda undangan:', err);
-      setError(err.message || 'Gagal memuat data agenda jadwal training.');
+      if (!silent) {
+        console.error('Error loading agenda undangan:', err);
+        setError(err.message || 'Gagal memuat data agenda jadwal training.');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+      if (forceRefresh) setIsRefreshing(false);
     }
   };
 
   // Trigger load whenever filters or page changes
   useEffect(() => {
     loadData();
+  }, [
+    search,
+    filterNik,
+    filterNama,
+    filterKodeToko,
+    filterCabang,
+    filterAs,
+    filterAm,
+    filterJenis,
+    filterSistem,
+    filterTanggal,
+    myOnly,
+    page,
+    limit,
+  ]);
+
+  // Automatic silent live sync every 10 seconds behind the scenes (zero screen flicker)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadData(true);
+    }, 10000);
+    return () => clearInterval(timer);
   }, [
     search,
     filterNik,
@@ -262,18 +290,27 @@ export const AgendaUndangan: React.FC<AgendaUndanganProps> = ({
               </button>
             )}
 
+            {/* Live Sync Badge & Refresh Button */}
+            <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-medium transition-colors ${
+              isLight ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-slate-800/80 border-slate-700 text-slate-300'
+            }`} title="Sinkronisasi otomatis dengan Supabase berjalan setiap 10 detik di balik layar">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Live Sync 10s</span>
+            </div>
+
             <button
               type="button"
-              onClick={loadData}
-              disabled={loading}
-              className={`p-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+              onClick={() => loadData(false, true)}
+              disabled={loading || isRefreshing}
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
                 isLight
                   ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400'
                   : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
               }`}
-              title="Perbarui Data"
+              title="Perbarui & Sinkronkan langsung dengan data Supabase terbaru"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-500' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loading || isRefreshing ? 'animate-spin text-blue-500' : 'text-slate-500'}`} />
+              <span className="hidden md:inline">Sinkronkan</span>
             </button>
 
             <button
@@ -797,7 +834,7 @@ export const AgendaUndangan: React.FC<AgendaUndanganProps> = ({
             </div>
             <button
               type="button"
-              onClick={loadData}
+              onClick={() => loadData()}
               className="font-bold underline cursor-pointer"
             >
               Coba Lagi

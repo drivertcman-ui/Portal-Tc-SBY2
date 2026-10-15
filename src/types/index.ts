@@ -171,6 +171,7 @@ export interface UndanganResponse {
     totalCabang?: number;
     myTotal?: number;
   };
+  lastSyncedAt?: string;
 }
 
 export interface SupabaseSourceConfig {

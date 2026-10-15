@@ -166,9 +166,11 @@ export const TrainingAbsensi: React.FC<TrainingAbsensiProps> = ({ user, themeMod
 
   const todayInfo = getTanggalBerjalanIndo();
 
-  const loadData = async (forceDateSelect = true) => {
-    setIsLoadingSchedule(true);
-    setIsLoadingMySchedules(true);
+  const loadData = async (forceDateSelect = true, silent = false) => {
+    if (!silent) {
+      setIsLoadingSchedule(true);
+      setIsLoadingMySchedules(true);
+    }
 
     let scheduleOptions: TrainingDateOption[] = [];
     let userSchedules: any[] = [];
@@ -179,9 +181,9 @@ export const TrainingAbsensi: React.FC<TrainingAbsensiProps> = ({ user, themeMod
       scheduleOptions = scheduleRes.scheduleOptions || [];
       setSchedules(scheduleOptions);
     } catch (err) {
-      console.error('Failed to load training schedules:', err);
+      if (!silent) console.error('Failed to load training schedules:', err);
     } finally {
-      setIsLoadingSchedule(false);
+      if (!silent) setIsLoadingSchedule(false);
     }
 
     // Safe individual fetch for user's own schedules
@@ -190,9 +192,9 @@ export const TrainingAbsensi: React.FC<TrainingAbsensiProps> = ({ user, themeMod
       userSchedules = myRes.mySchedules || [];
       setMySchedules(userSchedules);
     } catch (err) {
-      console.error('Failed to load user schedules:', err);
+      if (!silent) console.error('Failed to load user schedules:', err);
     } finally {
-      setIsLoadingMySchedules(false);
+      if (!silent) setIsLoadingMySchedules(false);
     }
 
     // Auto-select date & jenis training intelligently
@@ -246,6 +248,13 @@ export const TrainingAbsensi: React.FC<TrainingAbsensiProps> = ({ user, themeMod
 
   useEffect(() => {
     loadData(true);
+
+    // Silent background auto-sync every 10 seconds (no screen flicker)
+    const interval = setInterval(() => {
+      loadData(false, true);
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // When date or jenis changes, check participant

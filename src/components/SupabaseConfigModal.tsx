@@ -115,14 +115,14 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
             trainings: { ...DEFAULT_CONFIG.sources.trainings, ...(data.supabaseConfig.sources?.trainings || {}) } as SupabaseSourceConfig,
             akunPintar: {
               ...DEFAULT_CONFIG.sources.akunPintar,
-              tableName: data.supabaseConfig.sources?.akunPintar?.tableName || 'data_pintar',
               ...(data.supabaseConfig.sources?.akunPintar || {}),
+              tableName: data.supabaseConfig.sources?.akunPintar?.tableName || 'data_pintar',
             } as SupabaseSourceConfig,
             undangan: { ...DEFAULT_CONFIG.sources.undangan, ...(data.supabaseConfig.sources?.undangan || {}) } as SupabaseSourceConfig,
             absensi: {
               ...DEFAULT_CONFIG.sources.absensi,
-              tableName: data.supabaseConfig.sources?.absensi?.tableName || 'data_absensi',
               ...(data.supabaseConfig.sources?.absensi || {}),
+              tableName: data.supabaseConfig.sources?.absensi?.tableName || 'data_absensi',
             } as SupabaseSourceConfig,
           },
         });

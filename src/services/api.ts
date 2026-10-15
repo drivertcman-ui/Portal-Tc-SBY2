@@ -582,6 +582,7 @@ export const api = {
     myOnly?: boolean;
     page?: number;
     limit?: number;
+    refresh?: boolean;
   }): Promise<UndanganResponse> {
     const token = this.getToken();
     if (!token) throw new Error('Token tidak ditemukan');
@@ -601,6 +602,7 @@ export const api = {
     if (params.myOnly) query.append('myOnly', 'true');
     if (params.page) query.append('page', String(params.page));
     if (params.limit) query.append('limit', String(params.limit));
+    if (params.refresh) query.append('refresh', 'true');
 
     const res = await fetch(`/api/undangan?${query.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
